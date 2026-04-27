@@ -9,7 +9,25 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) return NextResponse.redirect(`${origin}${next}`)
+    if (!error) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: existing } = await supabase
+          .from('restaurants')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (!existing) {
+          await supabase.from('restaurants').insert({
+            user_id: user.id,
+            name: user.user_metadata?.restaurant_name ?? 'Mon restaurant',
+            email: user.email ?? '',
+          })
+        }
+      }
+      return NextResponse.redirect(`${origin}${next}`)
+    }
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth`)

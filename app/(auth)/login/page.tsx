@@ -10,21 +10,37 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [emailNotConfirmed, setEmailNotConfirmed] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSent, setResendSent] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setEmailNotConfirmed(false)
+    setResendSent(false)
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
-      setError('Email ou mot de passe incorrect.')
+      if (error.message.includes('Email not confirmed')) {
+        setEmailNotConfirmed(true)
+      } else {
+        setError('Email ou mot de passe incorrect.')
+      }
       setLoading(false)
     } else {
       router.push('/dashboard')
       router.refresh()
     }
+  }
+
+  async function handleResend() {
+    setResendLoading(true)
+    await supabase.auth.resend({ type: 'signup', email })
+    setResendLoading(false)
+    setResendSent(true)
   }
 
   return (
@@ -51,6 +67,24 @@ export default function LoginPage() {
             className="input"
           />
         </div>
+
+        {emailNotConfirmed && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 space-y-2">
+            <p>Votre email n'est pas encore confirmé. Vérifiez votre boîte mail.</p>
+            {resendSent ? (
+              <p className="text-amber-700">Email de confirmation renvoyé ✓</p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendLoading}
+                className="text-amber-900 font-medium underline hover:no-underline disabled:opacity-50"
+              >
+                {resendLoading ? 'Envoi…' : 'Renvoyer l\'email de confirmation'}
+              </button>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
