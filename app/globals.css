@@ -15,6 +15,26 @@ body {
   color: #1d1d1f;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Push content above the iPhone home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Bottom nav: extends visually into the safe area so icons sit above it */
+.bottom-nav-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Main content wrapper: account for nav height + safe area on mobile */
+.pb-nav-safe {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .pb-nav-safe { padding-bottom: 0; }
+}
+
+/* Sticky save button in scanner: sit above nav + safe area */
+.bottom-above-nav {
+  bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 
 @layer utilities {

@@ -36,6 +36,10 @@ function toISO(masked: string): string {
 
 // ── Camera permission modal ──────────────────────────────────────────────────
 function PermissionModal({ onClose, onManual }: { onClose: () => void; onManual: () => void }) {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  const isIOS     = /iphone|ipad|ipod/i.test(ua)
+  const isAndroid = /android/i.test(ua)
+
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 px-4 pb-6 md:pb-0">
       <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden">
@@ -50,13 +54,31 @@ function PermissionModal({ onClose, onManual }: { onClose: () => void; onManual:
           </p>
         </div>
 
-        {/* Steps */}
+        {/* Platform-specific steps */}
         <div className="mx-5 mb-5 bg-bg rounded-2xl p-4 space-y-3">
           <p className="text-xs font-semibold text-secondary uppercase tracking-wide mb-1">Comment autoriser</p>
-          <Step n={1} text="Ouvrez les Réglages de votre iPhone" />
-          <Step n={2} text="Descendez jusqu'à Safari (ou Chrome)" />
-          <Step n={3} text='Appuyez sur "Caméra" et choisissez "Autoriser"' />
-          <Step n={4} text="Revenez sur FreshTrack et réessayez" />
+          {isIOS ? (
+            <>
+              <Step n={1} text='Ouvrez "Réglages" sur votre iPhone' />
+              <Step n={2} text={`Faites défiler jusqu'à "Safari"`} />
+              <Step n={3} text='Appuyez sur "Caméra" → choisissez "Autoriser"' />
+              <Step n={4} text="Revenez sur FreshTrack et réessayez" />
+            </>
+          ) : isAndroid ? (
+            <>
+              <Step n={1} text='Ouvrez "Réglages" sur votre Android' />
+              <Step n={2} text='"Applications" → votre navigateur (Chrome)' />
+              <Step n={3} text='"Autorisations" → "Caméra" → Autoriser' />
+              <Step n={4} text="Revenez sur FreshTrack et réessayez" />
+            </>
+          ) : (
+            <>
+              <Step n={1} text="Ouvrez les paramètres de votre navigateur" />
+              <Step n={2} text='Allez dans "Confidentialité et sécurité"' />
+              <Step n={3} text='Autorisez la caméra pour ce site' />
+              <Step n={4} text="Rechargez la page et réessayez" />
+            </>
+          )}
         </div>
 
         {/* Actions */}
@@ -65,7 +87,7 @@ function PermissionModal({ onClose, onManual }: { onClose: () => void; onManual:
             onClick={onClose}
             className="btn-primary w-full flex items-center justify-center gap-2"
           >
-            <Settings size={15} /> Compris, je vais dans Réglages
+            <Settings size={15} /> J'ai compris
           </button>
           <button
             onClick={onManual}
@@ -132,6 +154,23 @@ export default function ScannerPage() {
 
   async function startScanner() {
     setError('')
+
+    // Step 1 — explicitly request camera permission before launching html5-qrcode.
+    // This surfaces the browser's native prompt immediately and lets us catch
+    // NotAllowedError / NotFoundError cleanly without html5-qrcode's opaque errors.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setShowPermissionModal(true)
+      return
+    }
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      probe.getTracks().forEach(t => t.stop()) // release immediately — html5-qrcode will reopen
+    } catch {
+      setShowPermissionModal(true)
+      return
+    }
+
+    // Step 2 — permission granted, start the actual scanner
     try {
       const { Html5Qrcode } = await import('html5-qrcode')
       const scanner = new Html5Qrcode('qr-reader')
@@ -149,19 +188,8 @@ export default function ScannerPage() {
         () => { /* ignore per-frame errors */ }
       )
       setScanning(true)
-    } catch (err: unknown) {
-      const msg = ((err as Error)?.message || (err as Error)?.name || '').toLowerCase()
-      // Detect permission denied vs other errors
-      if (
-        msg.includes('notallowed') ||
-        msg.includes('permission') ||
-        msg.includes('denied') ||
-        msg.includes('not allowed')
-      ) {
-        setShowPermissionModal(true)
-      } else {
-        setError("Impossible d'accéder à la caméra. Utilisez la saisie manuelle.")
-      }
+    } catch {
+      setError("Impossible d'accéder à la caméra. Utilisez la saisie manuelle.")
     }
   }
 
@@ -419,8 +447,8 @@ export default function ScannerPage() {
           </div>
         </div>
 
-        {/* Mobile sticky save button */}
-        <div className="md:hidden fixed bottom-16 left-0 right-0 px-4 py-3 bg-white/95 backdrop-blur-sm border-t border-border">
+        {/* Mobile sticky save button — sits above bottom nav + safe area */}
+        <div className="md:hidden fixed bottom-above-nav left-0 right-0 px-4 py-3 bg-white/95 backdrop-blur-sm border-t border-border">
           {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
           {saveButton}
         </div>

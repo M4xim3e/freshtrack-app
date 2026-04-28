@@ -26,7 +26,7 @@ export default function Sidebar({ restaurantName }: { restaurantName: string }) 
   return (
     <>
       {/* Desktop sidebar — hidden on mobile */}
-      <aside className="hidden md:flex w-60 min-h-screen bg-white border-r border-border flex-col fixed left-0 top-0 z-20">
+      <aside className="hidden md:flex w-60 min-h-[100dvh] bg-white border-r border-border flex-col fixed left-0 top-0 z-20">
         <div className="p-5 border-b border-border">
           <div className="flex items-center gap-2.5">
             <span className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center text-base">🌿</span>
@@ -71,20 +71,22 @@ export default function Sidebar({ restaurantName }: { restaurantName: string }) 
       </aside>
 
       {/* Mobile bottom navigation — hidden on desktop */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-border flex items-center justify-around h-16 safe-pb">
-        {links.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
-          return (
-            <Link
-              key={href} href={href}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors
-                ${active ? 'text-primary' : 'text-secondary'}`}
-            >
-              <Icon size={22} strokeWidth={active ? 2.5 : 1.75} />
-              <span className="text-[10px] font-medium">{label}</span>
-            </Link>
-          )
-        })}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-border bottom-nav-safe">
+        <div className="flex items-center justify-around h-16">
+          {links.map(({ href, icon: Icon, label }) => {
+            const active = pathname === href || pathname.startsWith(href + '/')
+            return (
+              <Link
+                key={href} href={href}
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors
+                  ${active ? 'text-primary' : 'text-secondary'}`}
+              >
+                <Icon size={22} strokeWidth={active ? 2.5 : 1.75} />
+                <span className="text-[10px] font-medium">{label}</span>
+              </Link>
+            )
+          })}
+        </div>
       </nav>
     </>
   )

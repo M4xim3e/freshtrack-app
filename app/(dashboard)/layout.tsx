@@ -18,9 +18,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const today = format(new Date(), "EEEE d MMMM yyyy", { locale: fr })
 
   return (
-    <div className="flex min-h-screen bg-bg">
+    <div className="flex min-h-[100dvh] bg-bg">
       <Sidebar restaurantName={restaurant?.name ?? 'Mon restaurant'} />
-      <div className="flex-1 md:ml-60 flex flex-col pb-16 md:pb-0">
+      <div className="flex-1 md:ml-60 flex flex-col pb-nav-safe">
         <header className="h-14 bg-white border-b border-border flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
           <div />
           <span className="text-sm text-secondary capitalize">{today}</span>
