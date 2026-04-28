@@ -38,36 +38,56 @@ export default async function ProduitsPage() {
             <p className="text-secondary text-sm">Ajoutez votre premier produit ci-dessus.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-bg text-xs text-secondary">
-                  <th className="text-left px-5 py-3 font-medium">Produit</th>
-                  <th className="text-left px-5 py-3 font-medium">Code-barres</th>
-                  <th className="text-left px-5 py-3 font-medium">Catégorie</th>
-                  <th className="text-left px-5 py-3 font-medium">Qté</th>
-                  <th className="text-left px-5 py-3 font-medium">DLC</th>
-                  <th className="text-left px-5 py-3 font-medium">Statut</th>
-                  <th className="px-5 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map(p => (
-                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-bg/60 transition-colors">
-                    <td className="px-5 py-3.5 font-medium text-dark">{p.name}</td>
-                    <td className="px-5 py-3.5 text-secondary font-mono text-xs">{p.barcode || '—'}</td>
-                    <td className="px-5 py-3.5 text-secondary">{p.category}</td>
-                    <td className="px-5 py-3.5 text-secondary">{p.quantity} {p.unit}</td>
-                    <td className="px-5 py-3.5 text-secondary whitespace-nowrap">{formatDate(p.expiry_date)}</td>
-                    <td className="px-5 py-3.5"><ExpiryBadge expiryDate={p.expiry_date} /></td>
-                    <td className="px-5 py-3.5 text-center">
-                      <DeleteProductButton productId={p.id} />
-                    </td>
+          <>
+            {/* Mobile: vertical cards */}
+            <div className="md:hidden divide-y divide-border">
+              {products.map(p => (
+                <div key={p.id} className="flex items-start justify-between gap-3 p-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-dark text-sm truncate">{p.name}</p>
+                    <p className="text-xs text-secondary mt-0.5">{p.category} · Qté : {p.quantity} {p.unit}</p>
+                    <p className="text-xs text-secondary">DLC : {formatDate(p.expiry_date)}</p>
+                    <div className="mt-2">
+                      <ExpiryBadge expiryDate={p.expiry_date} />
+                    </div>
+                  </div>
+                  <DeleteProductButton productId={p.id} />
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-bg text-xs text-secondary">
+                    <th className="text-left px-5 py-3 font-medium">Produit</th>
+                    <th className="text-left px-5 py-3 font-medium">Code-barres</th>
+                    <th className="text-left px-5 py-3 font-medium">Catégorie</th>
+                    <th className="text-left px-5 py-3 font-medium">Qté</th>
+                    <th className="text-left px-5 py-3 font-medium">DLC</th>
+                    <th className="text-left px-5 py-3 font-medium">Statut</th>
+                    <th className="px-5 py-3 font-medium">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {products.map(p => (
+                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-bg/60 transition-colors">
+                      <td className="px-5 py-3.5 font-medium text-dark">{p.name}</td>
+                      <td className="px-5 py-3.5 text-secondary font-mono text-xs">{p.barcode || '—'}</td>
+                      <td className="px-5 py-3.5 text-secondary">{p.category}</td>
+                      <td className="px-5 py-3.5 text-secondary">{p.quantity} {p.unit}</td>
+                      <td className="px-5 py-3.5 text-secondary whitespace-nowrap">{formatDate(p.expiry_date)}</td>
+                      <td className="px-5 py-3.5"><ExpiryBadge expiryDate={p.expiry_date} /></td>
+                      <td className="px-5 py-3.5 text-center">
+                        <DeleteProductButton productId={p.id} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Mail } from 'lucide-react'
 
 export default function RegisterPage() {
   const [restaurantName, setRestaurantName] = useState('')
@@ -11,33 +11,84 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const [emailSent, setEmailSent] = useState(false)
   const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
+    if (password.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères.')
+      return
+    }
     setLoading(true)
 
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
-    if (signUpError) { setError(signUpError.message); setLoading(false); return }
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: { restaurant_name: restaurantName },
+      },
+    })
 
-    if (data.user) {
-      const { error: insertError } = await supabase
-        .from('restaurants')
-        .insert({ user_id: data.user.id, name: restaurantName, email })
-      if (insertError) { setError('Erreur lors de la création du profil.'); setLoading(false); return }
+    if (signUpError) {
+      setError(signUpError.message)
+      setLoading(false)
+      return
     }
 
-    router.push('/dashboard')
-    router.refresh()
+    // Créer l'entrée restaurant même avant confirmation
+    if (data.user) {
+      await supabase.from('restaurants').insert({
+        user_id: data.user.id,
+        name: restaurantName,
+        email,
+      })
+    }
+
+    setEmailSent(true)
+    setLoading(false)
+  }
+
+  // Écran de confirmation email
+  if (emailSent) {
+    return (
+      <div className="card p-8 text-center">
+        <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-5">
+          <Mail className="text-primary" size={28} />
+        </div>
+        <h1 className="text-2xl font-bold text-dark mb-2 tracking-tight">
+          Vérifiez votre adresse mail
+        </h1>
+        <p className="text-secondary text-sm leading-relaxed mb-6">
+          On a envoyé un lien de confirmation à <strong className="text-dark">{email}</strong>.
+          Cliquez dessus pour activer votre compte et accéder à FreshTrack.
+        </p>
+        <p className="text-xs text-secondary">
+          Pas reçu ?{' '}
+          <button
+            onClick={() => setEmailSent(false)}
+            className="text-primary font-medium hover:underline"
+          >
+            Renvoyer l'email
+          </button>
+        </p>
+        <div className="mt-6 pt-6 border-t border-border">
+          <Link href="/login" className="text-sm text-secondary hover:text-dark transition-colors">
+            Retour à la connexion
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="card p-8">
       <h1 className="text-2xl font-bold text-dark mb-1 tracking-tight">Créer un compte</h1>
-      <p className="text-secondary text-sm mb-7">Démarrez gratuitement. Aucune carte bancaire requise.</p>
+      <p className="text-secondary text-sm mb-7">
+        Démarrez gratuitement. Aucune carte bancaire requise.
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -59,7 +110,10 @@ export default function RegisterPage() {
           />
         </div>
         <div>
-          <label className="label">Mot de passe <span className="text-secondary font-normal">(8 caractères min.)</span></label>
+          <label className="label">
+            Mot de passe{' '}
+            <span className="text-secondary font-normal">(8 caractères min.)</span>
+          </label>
           <input
             type="password" required minLength={8}
             value={password} onChange={e => setPassword(e.target.value)}
@@ -74,9 +128,15 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 mt-2">
+        <button
+          type="submit" disabled={loading}
+          className="btn-primary w-full flex items-center justify-center gap-2 mt-2"
+        >
           {loading ? (
-            <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Création...</>
+            <>
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Création…
+            </>
           ) : 'Créer mon compte gratuitement'}
         </button>
       </form>

@@ -64,7 +64,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(({ label, value, icon: Icon, bg, text }) => (
           <div key={label} className={`card p-5 ${bg}`}>
             <div className="flex items-center justify-between mb-3">

@@ -20,12 +20,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen bg-bg">
       <Sidebar restaurantName={restaurant?.name ?? 'Mon restaurant'} />
-      <div className="flex-1 ml-60 flex flex-col">
-        <header className="h-14 bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10">
-          <div /> {/* page title injected per-page */}
+      <div className="flex-1 md:ml-60 flex flex-col pb-16 md:pb-0">
+        <header className="h-14 bg-white border-b border-border flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
+          <div />
           <span className="text-sm text-secondary capitalize">{today}</span>
         </header>
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6">
           {children}
         </main>
       </div>

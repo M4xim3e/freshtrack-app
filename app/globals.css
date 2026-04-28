@@ -34,3 +34,10 @@ body {
     @apply block text-sm font-medium text-dark mb-1.5;
   }
 }
+
+/* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
