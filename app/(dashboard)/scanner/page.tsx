@@ -395,48 +395,62 @@ export default function ScannerPage() {
                   Tu peux aussi utiliser un lecteur code-barres USB — il tape le code automatiquement.
                 </p>
               </div>
-            ) : !scanning && !barcode ? (
-              <div className="flex flex-col items-center justify-center gap-4 h-[45vw] md:h-auto md:py-14 bg-bg md:bg-transparent">
-                <div className="w-16 h-16 bg-primary-light rounded-2xl flex items-center justify-center">
-                  <Camera className="text-primary" size={28} />
-                </div>
-                <button onClick={startScanner} className="btn-primary flex items-center gap-2">
-                  <Camera size={16} /> Démarrer le scanner
-                </button>
-                {error && <p className="text-red-500 text-xs text-center max-w-[220px]">{error}</p>}
-              </div>
-            ) : scanning ? (
-              <div className="relative">
-                <div id="qr-reader" className="w-full overflow-hidden" style={{ minHeight: '200px' }} />
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-56 h-32 border-2 border-primary rounded-xl relative">
-                    <span className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-primary rounded-tl" />
-                    <span className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-primary rounded-tr" />
-                    <span className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-primary rounded-bl" />
-                    <span className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-primary rounded-br" />
-                  </div>
-                </div>
-                <button
-                  onClick={stopScanner}
-                  className="absolute top-3 right-3 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white z-10"
-                >
-                  <X size={14} />
-                </button>
-              </div>
             ) : (
-              <div className="flex items-center gap-3 px-4 md:px-5 py-4">
-                <CheckCircle className="text-primary flex-shrink-0" size={20} />
-                <div>
-                  <p className="text-sm font-medium text-dark">Code détecté</p>
-                  <p className="text-xs font-mono text-secondary">{barcode}</p>
+              <>
+                {/*
+                  #qr-reader MUST always be in the DOM when in scanner mode —
+                  html5-qrcode looks it up by id before scanning starts.
+                  We show/hide it with CSS (not conditional rendering).
+                */}
+                <div className="relative" style={{ display: scanning ? 'block' : 'none' }}>
+                  <div id="qr-reader" className="w-full overflow-hidden" style={{ minHeight: '200px' }} />
+                  {/* Viewfinder overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-56 h-32 border-2 border-primary rounded-xl relative">
+                      <span className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-primary rounded-tl" />
+                      <span className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-primary rounded-tr" />
+                      <span className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-primary rounded-bl" />
+                      <span className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-primary rounded-br" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={stopScanner}
+                    className="absolute top-3 right-3 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white z-10"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => { setBarcode(''); setProductName(''); setDetectedProduct(null); startScanner() }}
-                  className="ml-auto text-xs text-secondary hover:text-dark underline"
-                >
-                  Rescanner
-                </button>
-              </div>
+
+                {/* Idle: start button */}
+                {!scanning && !barcode && (
+                  <div className="flex flex-col items-center justify-center gap-4 h-[45vw] md:h-auto md:py-14 bg-bg md:bg-transparent">
+                    <div className="w-16 h-16 bg-primary-light rounded-2xl flex items-center justify-center">
+                      <Camera className="text-primary" size={28} />
+                    </div>
+                    <button onClick={startScanner} className="btn-primary flex items-center gap-2">
+                      <Camera size={16} /> Démarrer le scanner
+                    </button>
+                    {error && <p className="text-red-500 text-xs text-center max-w-[220px]">{error}</p>}
+                  </div>
+                )}
+
+                {/* Code detected */}
+                {!scanning && barcode && (
+                  <div className="flex items-center gap-3 px-4 md:px-5 py-4">
+                    <CheckCircle className="text-primary flex-shrink-0" size={20} />
+                    <div>
+                      <p className="text-sm font-medium text-dark">Code détecté</p>
+                      <p className="text-xs font-mono text-secondary">{barcode}</p>
+                    </div>
+                    <button
+                      onClick={() => { setBarcode(''); setProductName(''); setDetectedProduct(null); startScanner() }}
+                      className="ml-auto text-xs text-secondary hover:text-dark underline"
+                    >
+                      Rescanner
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
