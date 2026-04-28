@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { CATEGORIES } from '@/lib/utils'
-import { Camera, CheckCircle, X, Keyboard } from 'lucide-react'
+import { Camera, CheckCircle, X, Keyboard, Plus, Minus } from 'lucide-react'
 
 function mapCategory(pnns: string): string {
   const g = (pnns || '').toLowerCase()
@@ -19,89 +19,76 @@ function mapCategory(pnns: string): string {
 }
 
 export default function ScannerPage() {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const animRef = useRef<number | null>(null)
-  const [scanning, setScanning] = useState(false)
-  const [barcode, setBarcode] = useState('')
-  const [productName, setProductName] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scannerRef = useRef<any>(null)
+  const [scanning, setScanning]               = useState(false)
+  const [barcode, setBarcode]                 = useState('')
+  const [productName, setProductName]         = useState('')
   const [detectedProduct, setDetectedProduct] = useState<{ name: string; category: string } | null>(null)
-  const [expiryDate, setExpiryDate] = useState('')
-  const [quantity, setQuantity] = useState('1')
+  // Date split into 3 numeric fields → easier on mobile
+  const [day, setDay]     = useState('')
+  const [month, setMonth] = useState('')
+  const [year, setYear]   = useState('')
+  const [quantity, setQuantity] = useState(1)
   const [category, setCategory] = useState('Autre')
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [success, setSuccess]   = useState(false)
+  const [error, setError]       = useState('')
   const [manualMode, setManualMode] = useState(false)
-  const [supported, setSupported] = useState(true)
-  const router = useRouter()
+  const router  = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !('BarcodeDetector' in window)) {
-      setSupported(false)
+  // Computed ISO date for DB
+  const expiryDate = year.length === 4 && month && day
+    ? `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    : ''
+
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try { await scannerRef.current.stop() } catch {}
+      try { scannerRef.current.clear() } catch {}
+      scannerRef.current = null
     }
-    return () => stopScanner()
+    setScanning(false)
   }, [])
+
+  useEffect(() => {
+    return () => { stopScanner() }
+  }, [stopScanner])
 
   async function startScanner() {
     setError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
+      const { Html5Qrcode } = await import('html5-qrcode')
+      const scanner = new Html5Qrcode('qr-reader')
+      scannerRef.current = scanner
+
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 120 } },
+        async (decodedText: string) => {
+          navigator.vibrate?.(60)
+          setBarcode(decodedText)
+          await stopScanner()
+          await lookupProduct(decodedText)
+        },
+        () => { /* ignore per-frame errors */ }
+      )
       setScanning(true)
-      detectLoop()
     } catch {
       setError("Impossible d'accéder à la caméra. Vérifiez les autorisations ou utilisez la saisie manuelle.")
     }
   }
 
-  async function detectLoop() {
-    if (!('BarcodeDetector' in window) || !videoRef.current) return
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detector = new (window as any).BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code']
-    })
-    const scan = async () => {
-      if (!videoRef.current) return
-      try {
-        const results = await detector.detect(videoRef.current)
-        if (results.length > 0) {
-          const code = results[0].rawValue
-          setBarcode(code)
-          navigator.vibrate?.(60)
-          stopScanner()
-          await lookupProduct(code)
-          return
-        }
-      } catch {}
-      animRef.current = requestAnimationFrame(scan)
-    }
-    animRef.current = requestAnimationFrame(scan)
-  }
-
-  function stopScanner() {
-    if (animRef.current) cancelAnimationFrame(animRef.current)
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-    setScanning(false)
-  }
-
   async function lookupProduct(code: string) {
     try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
+      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
       const data = await res.json()
       if (data.status === 1) {
-        const product = data.product
-        const name = product?.product_name_fr || product?.product_name || ''
-        const pnns = product?.pnns_groups_1 || product?.pnns_groups_2 || ''
-        const mappedCat = mapCategory(pnns)
+        const product    = data.product
+        const name       = product?.product_name_fr || product?.product_name || ''
+        const pnns       = product?.pnns_groups_1 || product?.pnns_groups_2 || ''
+        const mappedCat  = mapCategory(pnns)
         if (name) {
           setProductName(name)
           setCategory(mappedCat)
@@ -112,7 +99,8 @@ export default function ScannerPage() {
   }
 
   async function handleSave() {
-    if (!productName || !expiryDate) { setError('Nom et DLC obligatoires.'); return }
+    if (!productName)  { setError('Le nom du produit est obligatoire.'); return }
+    if (!expiryDate)   { setError('La date limite de consommation est obligatoire.'); return }
     setLoading(true); setError('')
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setError('Non connecté.'); setLoading(false); return }
@@ -121,11 +109,11 @@ export default function ScannerPage() {
     if (!restaurant) { setError('Profil restaurant introuvable.'); setLoading(false); return }
     const { error: insertError } = await supabase.from('products').insert({
       restaurant_id: restaurant.id,
-      name: productName,
-      barcode: barcode || null,
+      name:          productName,
+      barcode:       barcode || null,
       category,
-      quantity: parseInt(quantity),
-      expiry_date: expiryDate,
+      quantity,
+      expiry_date:   expiryDate,
     })
     if (insertError) { setError("Erreur lors de l'enregistrement."); setLoading(false); return }
     setSuccess(true)
@@ -157,7 +145,6 @@ export default function ScannerPage() {
   )
 
   return (
-    /* Mobile: full-screen flex column. Desktop: centered max-w-lg */
     <div className="-mx-4 -mt-4 md:mx-auto md:mt-0 md:max-w-lg flex flex-col min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-0 md:space-y-5">
 
       {/* Desktop-only title */}
@@ -196,6 +183,7 @@ export default function ScannerPage() {
                 onChange={e => { setBarcode(e.target.value); if (e.target.value.length > 7) lookupProduct(e.target.value) }}
                 placeholder="Ex: 3017620422003"
                 className="input font-mono"
+                inputMode="numeric"
               />
               <p className="text-xs text-secondary mt-2">
                 Tu peux aussi utiliser un lecteur code-barres USB — il tape le code automatiquement.
@@ -206,27 +194,18 @@ export default function ScannerPage() {
               <div className="w-16 h-16 bg-primary-light rounded-2xl flex items-center justify-center">
                 <Camera className="text-primary" size={28} />
               </div>
-              {!supported && (
-                <p className="text-xs text-orange-600 bg-orange-50 px-3 py-2 rounded-lg text-center max-w-xs">
-                  Ton navigateur ne supporte pas le scan natif. Utilise Chrome ou Safari, ou passe en saisie manuelle.
-                </p>
-              )}
               <button
                 onClick={startScanner}
                 className="btn-primary flex items-center gap-2"
-                disabled={!supported}
               >
                 <Camera size={16} /> Démarrer le scanner
               </button>
             </div>
           ) : scanning ? (
-            <div className="relative h-[60vw] md:h-auto">
-              <video
-                ref={videoRef}
-                className="w-full h-full md:aspect-video object-cover bg-black"
-                muted
-                playsInline
-              />
+            <div className="relative">
+              {/* html5-qrcode renders into this div */}
+              <div id="qr-reader" className="w-full overflow-hidden" style={{ minHeight: '200px' }} />
+              {/* Overlay viewfinder */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-56 h-32 border-2 border-primary rounded-xl relative">
                   <span className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-primary rounded-tl" />
@@ -237,7 +216,7 @@ export default function ScannerPage() {
               </div>
               <button
                 onClick={stopScanner}
-                className="absolute top-3 right-3 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white"
+                className="absolute top-3 right-3 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white z-10"
               >
                 <X size={14} />
               </button>
@@ -272,9 +251,11 @@ export default function ScannerPage() {
         )}
       </div>
 
-      {/* ── Bottom section: form (scrollable on mobile) ── */}
+      {/* ── Bottom section: form ── */}
       <div className="flex-1 overflow-y-auto md:overflow-visible px-4 md:px-0 pt-4 md:pt-0 pb-4">
         <div className="md:card md:p-5 space-y-4">
+
+          {/* Product name */}
           <div>
             <label className="label">Nom du produit *</label>
             <input
@@ -284,41 +265,97 @@ export default function ScannerPage() {
               className="input"
             />
           </div>
+
+          {/* DLC — 3 numeric inputs: day / month / year */}
+          <div>
+            <label className="label">Date limite de consommation *</label>
+            <div className="flex items-center gap-2">
+              <input
+                value={day}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 2)
+                  setDay(v)
+                }}
+                placeholder="JJ"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
+                className="input text-center"
+                style={{ width: '4rem' }}
+              />
+              <span className="text-secondary font-medium">/</span>
+              <input
+                value={month}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 2)
+                  setMonth(v)
+                }}
+                placeholder="MM"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
+                className="input text-center"
+                style={{ width: '4rem' }}
+              />
+              <span className="text-secondary font-medium">/</span>
+              <input
+                value={year}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 4)
+                  setYear(v)
+                }}
+                placeholder="AAAA"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={4}
+                className="input text-center flex-1"
+              />
+            </div>
+            {expiryDate && (
+              <p className="text-xs text-secondary mt-1.5">
+                Date sélectionnée : {new Date(expiryDate + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+            )}
+          </div>
+
+          {/* Quantity stepper + category */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">DLC *</label>
-              <input
-                type="date"
-                value={expiryDate}
-                onChange={e => setExpiryDate(e.target.value)}
-                className="input"
-              />
+              <label className="label">Quantité</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-bg hover:bg-white text-dark transition-colors flex-shrink-0"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="flex-1 text-center text-lg font-semibold text-dark select-none">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity(q => q + 1)}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-bg hover:bg-white text-dark transition-colors flex-shrink-0"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
             </div>
             <div>
-              <label className="label">Quantité</label>
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={e => setQuantity(e.target.value)}
-                className="input"
-              />
+              <label className="label">Catégorie</label>
+              <select value={category} onChange={e => setCategory(e.target.value)} className="input">
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
             </div>
           </div>
-          <div>
-            <label className="label">Catégorie</label>
-            <select value={category} onChange={e => setCategory(e.target.value)} className="input">
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
+
           {error && <p className="text-red-600 text-sm">{error}</p>}
 
-          {/* Desktop save button (inside form) */}
+          {/* Desktop save button */}
           <div className="hidden md:block">{saveButton}</div>
         </div>
       </div>
 
-      {/* Mobile sticky save button — fixed above bottom nav */}
+      {/* Mobile sticky save button */}
       <div className="md:hidden fixed bottom-16 left-0 right-0 px-4 py-3 bg-white/95 backdrop-blur-sm border-t border-border">
         {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
         {saveButton}

@@ -35,6 +35,31 @@ body {
   }
 }
 
+/* ── html5-qrcode: hide default controls, keep only the video feed ── */
+#qr-reader {
+  border: none !important;
+  padding: 0 !important;
+}
+#qr-reader video {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover;
+  border-radius: 0;
+}
+/* Hide the file-upload button and select-camera UI injected by html5-qrcode */
+#qr-reader__dashboard_section_csr,
+#qr-reader__dashboard_section_fsr,
+#qr-reader__header_message,
+#qr-reader__status_span,
+#qr-reader__camera_selection,
+#qr-reader__dashboard_section_swaplink,
+#html5-qrcode-button-camera-permission,
+#html5-qrcode-button-camera-stop,
+#html5-qrcode-anchor-scan-type-change,
+#qr-reader__dashboard {
+  display: none !important;
+}
+
 /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
 @media (max-width: 767px) {
   input, select, textarea {
