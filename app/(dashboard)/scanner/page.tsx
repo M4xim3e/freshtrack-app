@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { CATEGORIES } from '@/lib/utils'
-import { Camera, CheckCircle, X, Keyboard, Plus, Minus, ShieldAlert, Settings, Zap, Share } from 'lucide-react'
+import { Camera, CheckCircle, X, Keyboard, Plus, Minus, ShieldAlert, Settings, Zap, Share, CalendarDays, Clock } from 'lucide-react'
 import QuickAddModal, { type FrequentItem } from '@/components/QuickAddModal'
 
 function mapCategory(pnns: string): string {
@@ -110,7 +110,9 @@ export default function ScannerPage() {
   const [barcode, setBarcode]                 = useState('')
   const [productName, setProductName]         = useState('')
   const [detectedProduct, setDetectedProduct] = useState<{ name: string; category: string } | null>(null)
+  const [dateMode, setDateMode]               = useState<'date' | 'days'>('date')
   const [dateMasked, setDateMasked]           = useState('')
+  const [daysCount, setDaysCount]             = useState(3)
   const [quantity, setQuantity]               = useState(1)
   const [category, setCategory]               = useState('Autre')
   const [loading, setLoading]                 = useState(false)
@@ -128,7 +130,14 @@ export default function ScannerPage() {
   const router   = useRouter()
   const supabase = createClient()
 
-  const expiryDate = toISO(dateMasked)
+  const expiryDate = (() => {
+    if (dateMode === 'days') {
+      const d = new Date()
+      d.setDate(d.getDate() + daysCount)
+      return d.toISOString().split('T')[0]
+    }
+    return toISO(dateMasked)
+  })()
 
   // Load restaurant + frequent products on mount
   useEffect(() => {
@@ -497,17 +506,84 @@ export default function ScannerPage() {
               />
             </div>
 
+            {/* DLC — date exacte ou nombre de jours */}
             <div>
-              <label className="label">Date limite de consommation *</label>
-              <input
-                value={dateMasked}
-                onChange={e => setDateMasked(formatDateMask(e.target.value))}
-                placeholder="JJ/MM/AAAA"
-                inputMode="numeric"
-                pattern="[0-9/]*"
-                maxLength={10}
-                className="input tracking-widest"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">Date limite de consommation *</label>
+                {/* Mode toggle */}
+                <div className="flex bg-bg rounded-lg p-0.5 border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('date')}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all
+                      ${dateMode === 'date' ? 'bg-white text-dark shadow-sm' : 'text-secondary hover:text-dark'}`}
+                  >
+                    <CalendarDays size={12} /> Date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('days')}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all
+                      ${dateMode === 'days' ? 'bg-white text-dark shadow-sm' : 'text-secondary hover:text-dark'}`}
+                  >
+                    <Clock size={12} /> Jours
+                  </button>
+                </div>
+              </div>
+
+              {dateMode === 'date' ? (
+                <input
+                  value={dateMasked}
+                  onChange={e => setDateMasked(formatDateMask(e.target.value))}
+                  placeholder="JJ/MM/AAAA"
+                  inputMode="numeric"
+                  pattern="[0-9/]*"
+                  maxLength={10}
+                  className="input tracking-widest"
+                />
+              ) : (
+                <>
+                  {/* Quick chips */}
+                  <div className="flex gap-2 mb-3 flex-wrap">
+                    {[1, 2, 3, 5, 7, 14, 30].map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDaysCount(d)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                          ${daysCount === d
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-bg border-border text-secondary hover:text-dark hover:border-dark'}`}
+                      >
+                        {d}j
+                      </button>
+                    ))}
+                  </div>
+                  {/* Stepper */}
+                  <div className="flex items-center border border-border rounded-xl overflow-hidden bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setDaysCount(d => Math.max(1, d - 1))}
+                      className="w-12 h-12 flex items-center justify-center text-dark hover:bg-bg transition-colors border-r border-border flex-shrink-0"
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <span className="flex-1 text-center">
+                      <span className="text-xl font-bold text-dark">{daysCount}</span>
+                      <span className="text-sm text-secondary ml-1">jour{daysCount > 1 ? 's' : ''}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDaysCount(d => d + 1)}
+                      className="w-12 h-12 flex items-center justify-center text-dark hover:bg-bg transition-colors border-l border-border flex-shrink-0"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Date confirmation */}
               {expiryDate && (
                 <p className="text-xs text-secondary mt-1.5">
                   ✓ {new Date(expiryDate + 'T12:00:00').toLocaleDateString('fr-FR', {
