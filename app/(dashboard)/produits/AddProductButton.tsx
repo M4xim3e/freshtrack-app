@@ -27,6 +27,21 @@ export default function AddProductButton({ restaurantId }: { restaurantId: strin
     e.preventDefault()
     setError('')
     setLoading(true)
+
+    // Compute scan_count from previous entries with same barcode
+    let scanCount = 1
+    if (form.barcode) {
+      const { data: prev } = await supabase
+        .from('products')
+        .select('scan_count')
+        .eq('restaurant_id', restaurantId)
+        .eq('barcode', form.barcode)
+        .order('scan_count', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (prev?.scan_count) scanCount = prev.scan_count + 1
+    }
+
     const { error } = await supabase.from('products').insert({
       restaurant_id: restaurantId,
       name: form.name,
@@ -36,8 +51,9 @@ export default function AddProductButton({ restaurantId }: { restaurantId: strin
       unit: form.unit,
       expiry_date: form.expiry_date,
       notes: form.notes || null,
+      scan_count: scanCount,
     })
-    if (error) { setError('Erreur lors de l\'ajout.'); setLoading(false); return }
+    if (error) { setError("Erreur lors de l'ajout."); setLoading(false); return }
     setOpen(false)
     setForm({ name:'', barcode:'', category:'Autre', quantity:'1', unit:'unité', expiry_date:'', notes:'' })
     router.refresh()

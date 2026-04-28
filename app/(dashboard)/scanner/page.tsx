@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { CATEGORIES } from '@/lib/utils'
-import { Camera, CheckCircle, X, Keyboard, Plus, Minus, ShieldAlert, Settings } from 'lucide-react'
+import { Camera, CheckCircle, X, Keyboard, Plus, Minus, ShieldAlert, Settings, Zap, Share } from 'lucide-react'
+import QuickAddModal, { type FrequentItem } from '@/components/QuickAddModal'
 
 function mapCategory(pnns: string): string {
   const g = (pnns || '').toLowerCase()
@@ -18,7 +19,6 @@ function mapCategory(pnns: string): string {
   return 'Autre'
 }
 
-/** Auto-format digits into DD/MM/YYYY as the user types */
 function formatDateMask(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 8)
   let out = digits.slice(0, 2)
@@ -27,7 +27,6 @@ function formatDateMask(raw: string): string {
   return out
 }
 
-/** Convert DD/MM/YYYY digits → ISO YYYY-MM-DD if complete */
 function toISO(masked: string): string {
   const d = masked.replace(/\D/g, '')
   if (d.length !== 8) return ''
@@ -43,18 +42,16 @@ function PermissionModal({ onClose, onManual }: { onClose: () => void; onManual:
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 px-4 pb-6 md:pb-0">
       <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden">
-        {/* Header */}
         <div className="flex flex-col items-center pt-8 pb-4 px-6">
           <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mb-4">
             <ShieldAlert className="text-orange-500" size={30} />
           </div>
           <h2 className="text-lg font-bold text-dark text-center">Accès à la caméra requis</h2>
           <p className="text-secondary text-sm text-center mt-2">
-            FreshTrack a besoin d'accéder à votre caméra pour scanner les codes-barres.
+            FreshTrack a besoin d&apos;accéder à votre caméra pour scanner les codes-barres.
           </p>
         </div>
 
-        {/* Platform-specific steps */}
         <div className="mx-5 mb-5 bg-bg rounded-2xl p-4 space-y-3">
           <p className="text-xs font-semibold text-secondary uppercase tracking-wide mb-1">Comment autoriser</p>
           {isIOS ? (
@@ -75,24 +72,17 @@ function PermissionModal({ onClose, onManual }: { onClose: () => void; onManual:
             <>
               <Step n={1} text="Ouvrez les paramètres de votre navigateur" />
               <Step n={2} text='Allez dans "Confidentialité et sécurité"' />
-              <Step n={3} text='Autorisez la caméra pour ce site' />
+              <Step n={3} text="Autorisez la caméra pour ce site" />
               <Step n={4} text="Rechargez la page et réessayez" />
             </>
           )}
         </div>
 
-        {/* Actions */}
         <div className="px-5 pb-6 space-y-2">
-          <button
-            onClick={onClose}
-            className="btn-primary w-full flex items-center justify-center gap-2"
-          >
-            <Settings size={15} /> J'ai compris
+          <button onClick={onClose} className="btn-primary w-full flex items-center justify-center gap-2">
+            <Settings size={15} /> J&apos;ai compris
           </button>
-          <button
-            onClick={onManual}
-            className="btn-secondary w-full text-center"
-          >
+          <button onClick={onManual} className="btn-secondary w-full text-center">
             Passer en saisie manuelle
           </button>
         </div>
@@ -120,24 +110,58 @@ export default function ScannerPage() {
   const [barcode, setBarcode]                 = useState('')
   const [productName, setProductName]         = useState('')
   const [detectedProduct, setDetectedProduct] = useState<{ name: string; category: string } | null>(null)
-  // Single masked date field
-  const [dateMasked, setDateMasked] = useState('')
-  const [quantity, setQuantity]     = useState(1)
-  const [category, setCategory]     = useState('Autre')
-  const [loading, setLoading]       = useState(false)
-  const [success, setSuccess]       = useState(false)
-  const [error, setError]           = useState('')
+  const [dateMasked, setDateMasked]           = useState('')
+  const [quantity, setQuantity]               = useState(1)
+  const [category, setCategory]               = useState('Autre')
+  const [loading, setLoading]                 = useState(false)
+  const [success, setSuccess]                 = useState(false)
+  const [error, setError]                     = useState('')
   const [manualMode, setManualMode]           = useState(false)
   const [showPermissionModal, setShowPermissionModal] = useState(false)
+  const [showInstallBanner, setShowInstallBanner]     = useState(false)
+
+  // Frequent products
+  const [restaurantId, setRestaurantId]       = useState<string | null>(null)
+  const [frequentProducts, setFrequentProducts] = useState<FrequentItem[]>([])
+  const [quickAddProduct, setQuickAddProduct] = useState<FrequentItem | null>(null)
+
   const router   = useRouter()
   const supabase = createClient()
 
   const expiryDate = toISO(dateMasked)
 
-  function handleDateInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const formatted = formatDateMask(e.target.value)
-    setDateMasked(formatted)
-  }
+  // Load restaurant + frequent products on mount
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: rest } = await supabase
+        .from('restaurants').select('id').eq('user_id', user.id).single()
+      if (!rest) return
+      setRestaurantId(rest.id)
+
+      const { data } = await supabase
+        .from('products')
+        .select('name, barcode, category, scan_count')
+        .eq('restaurant_id', rest.id)
+        .gte('scan_count', 3)
+        .order('scan_count', { ascending: false })
+
+      const seen = new Set<string>()
+      const frequent: FrequentItem[] = []
+      for (const p of data ?? []) {
+        const key = p.barcode || p.name
+        if (!seen.has(key)) {
+          seen.add(key)
+          frequent.push({ name: p.name, barcode: p.barcode ?? null, category: p.category, scan_count: p.scan_count ?? 0 })
+          if (frequent.length >= 6) break
+        }
+      }
+      setFrequentProducts(frequent)
+    }
+    init()
+    return () => { stopScanner() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -148,34 +172,28 @@ export default function ScannerPage() {
     setScanning(false)
   }, [])
 
-  useEffect(() => {
-    return () => { stopScanner() }
-  }, [stopScanner])
-
   async function startScanner() {
     setError('')
 
-    // Step 1 — explicitly request camera permission before launching html5-qrcode.
-    // This surfaces the browser's native prompt immediately and lets us catch
-    // NotAllowedError / NotFoundError cleanly without html5-qrcode's opaque errors.
+    // Probe permission before launching html5-qrcode
     if (!navigator.mediaDevices?.getUserMedia) {
       setShowPermissionModal(true)
+      setShowInstallBanner(true)
       return
     }
     try {
       const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      probe.getTracks().forEach(t => t.stop()) // release immediately — html5-qrcode will reopen
+      probe.getTracks().forEach(t => t.stop())
     } catch {
       setShowPermissionModal(true)
+      setShowInstallBanner(true)
       return
     }
 
-    // Step 2 — permission granted, start the actual scanner
     try {
       const { Html5Qrcode } = await import('html5-qrcode')
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
-
       await scanner.start(
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 220, height: 120 } },
@@ -185,7 +203,7 @@ export default function ScannerPage() {
           await stopScanner()
           await lookupProduct(decodedText)
         },
-        () => { /* ignore per-frame errors */ }
+        () => {}
       )
       setScanning(true)
     } catch {
@@ -215,11 +233,27 @@ export default function ScannerPage() {
     if (!productName) { setError('Le nom du produit est obligatoire.'); return }
     if (!expiryDate)  { setError('La date limite de consommation est obligatoire (format JJ/MM/AAAA).'); return }
     setLoading(true); setError('')
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setError('Non connecté.'); setLoading(false); return }
     const { data: restaurant } = await supabase
       .from('restaurants').select('id').eq('user_id', user.id).single()
     if (!restaurant) { setError('Profil restaurant introuvable.'); setLoading(false); return }
+
+    // Compute scan_count from previous entries with same barcode
+    let scanCount = 1
+    if (barcode) {
+      const { data: prev } = await supabase
+        .from('products')
+        .select('scan_count')
+        .eq('restaurant_id', restaurant.id)
+        .eq('barcode', barcode)
+        .order('scan_count', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (prev?.scan_count) scanCount = prev.scan_count + 1
+    }
+
     const { error: insertError } = await supabase.from('products').insert({
       restaurant_id: restaurant.id,
       name:          productName,
@@ -227,6 +261,7 @@ export default function ScannerPage() {
       category,
       quantity,
       expiry_date:   expiryDate,
+      scan_count:    scanCount,
     })
     if (insertError) { setError("Erreur lors de l'enregistrement."); setLoading(false); return }
     setSuccess(true)
@@ -246,11 +281,7 @@ export default function ScannerPage() {
   }
 
   const saveButton = (
-    <button
-      onClick={handleSave}
-      disabled={loading}
-      className="btn-primary w-full flex items-center justify-center gap-2"
-    >
+    <button onClick={handleSave} disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
       {loading
         ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Enregistrement…</>
         : 'Enregistrer dans le stock'}
@@ -259,11 +290,19 @@ export default function ScannerPage() {
 
   return (
     <>
-      {/* Camera permission modal */}
       {showPermissionModal && (
         <PermissionModal
           onClose={() => setShowPermissionModal(false)}
           onManual={() => { setShowPermissionModal(false); setManualMode(true) }}
+        />
+      )}
+
+      {quickAddProduct && restaurantId && (
+        <QuickAddModal
+          product={quickAddProduct}
+          restaurantId={restaurantId}
+          onClose={() => setQuickAddProduct(null)}
+          onSuccess={() => { setQuickAddProduct(null); router.push('/produits') }}
         />
       )}
 
@@ -275,10 +314,55 @@ export default function ScannerPage() {
           <p className="text-secondary text-sm mt-0.5">Scannez le code-barres ou saisissez-le manuellement.</p>
         </div>
 
-        {/* ── Top section: scanner / camera ── */}
+        {/* ── Top section ── */}
         <div className="flex-shrink-0">
+
+          {/* iOS install banner — appears when camera is blocked */}
+          {showInstallBanner && (
+            <div className="mx-4 md:mx-0 mb-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+              <Share size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-800">
+                  Pour utiliser la caméra, ajoutez FreshTrack à votre écran d&apos;accueil.
+                </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Sur Safari : appuyez sur le bouton partage{' '}
+                  <span className="inline-block">⬆</span>{' '}
+                  puis &ldquo;Sur l&apos;écran d&apos;accueil&rdquo;.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInstallBanner(false)}
+                className="flex-shrink-0 text-amber-400 hover:text-amber-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Frequent products chips */}
+          {frequentProducts.length > 0 && (
+            <div className="px-4 md:px-0 mb-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Zap size={13} className="text-primary" />
+                <p className="text-xs font-semibold text-secondary uppercase tracking-wide">Produits fréquents</p>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {frequentProducts.map(item => (
+                  <button
+                    key={item.barcode ?? item.name}
+                    onClick={() => setQuickAddProduct(item)}
+                    className="flex-shrink-0 bg-white border border-border rounded-full px-3 py-1.5 text-xs font-medium text-dark hover:border-primary hover:text-primary transition-colors whitespace-nowrap shadow-sm"
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Mode toggle */}
-          <div className="flex gap-2 px-4 pt-4 pb-3 md:px-0 md:pt-0 md:pb-0">
+          <div className="flex gap-2 px-4 pb-3 md:px-0 md:pb-0">
             <button
               onClick={() => { setManualMode(false); setBarcode('') }}
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all
@@ -316,21 +400,14 @@ export default function ScannerPage() {
                 <div className="w-16 h-16 bg-primary-light rounded-2xl flex items-center justify-center">
                   <Camera className="text-primary" size={28} />
                 </div>
-                <button
-                  onClick={startScanner}
-                  className="btn-primary flex items-center gap-2"
-                >
+                <button onClick={startScanner} className="btn-primary flex items-center gap-2">
                   <Camera size={16} /> Démarrer le scanner
                 </button>
-                {error && (
-                  <p className="text-red-500 text-xs text-center max-w-[220px]">{error}</p>
-                )}
+                {error && <p className="text-red-500 text-xs text-center max-w-[220px]">{error}</p>}
               </div>
             ) : scanning ? (
               <div className="relative">
-                {/* html5-qrcode renders the video here */}
                 <div id="qr-reader" className="w-full overflow-hidden" style={{ minHeight: '200px' }} />
-                {/* Viewfinder overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="w-56 h-32 border-2 border-primary rounded-xl relative">
                     <span className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-primary rounded-tl" />
@@ -363,7 +440,7 @@ export default function ScannerPage() {
             )}
           </div>
 
-          {/* Green feedback after product detection */}
+          {/* Green feedback */}
           {detectedProduct && (
             <div className="mx-4 md:mx-0 mt-3 bg-green-50 border border-green-200 rounded-2xl p-4 flex gap-3">
               <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={18} />
@@ -380,7 +457,6 @@ export default function ScannerPage() {
         <div className="flex-1 overflow-y-auto md:overflow-visible px-4 md:px-0 pt-4 md:pt-0 pb-4">
           <div className="md:card md:p-5 space-y-4">
 
-            {/* Product name */}
             <div>
               <label className="label">Nom du produit *</label>
               <input
@@ -391,12 +467,11 @@ export default function ScannerPage() {
               />
             </div>
 
-            {/* DLC — single masked field */}
             <div>
               <label className="label">Date limite de consommation *</label>
               <input
                 value={dateMasked}
-                onChange={handleDateInput}
+                onChange={e => setDateMasked(formatDateMask(e.target.value))}
                 placeholder="JJ/MM/AAAA"
                 inputMode="numeric"
                 pattern="[0-9/]*"
@@ -405,12 +480,13 @@ export default function ScannerPage() {
               />
               {expiryDate && (
                 <p className="text-xs text-secondary mt-1.5">
-                  ✓ {new Date(expiryDate + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  ✓ {new Date(expiryDate + 'T12:00:00').toLocaleDateString('fr-FR', {
+                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                  })}
                 </p>
               )}
             </div>
 
-            {/* Quantity stepper + category */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label">Quantité</label>
@@ -441,13 +517,11 @@ export default function ScannerPage() {
             </div>
 
             {error && <p className="text-red-600 text-sm">{error}</p>}
-
-            {/* Desktop save button */}
             <div className="hidden md:block">{saveButton}</div>
           </div>
         </div>
 
-        {/* Mobile sticky save button — sits above bottom nav + safe area */}
+        {/* Mobile sticky save button */}
         <div className="md:hidden fixed bottom-above-nav left-0 right-0 px-4 py-3 bg-white/95 backdrop-blur-sm border-t border-border">
           {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
           {saveButton}

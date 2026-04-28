@@ -1,9 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { formatDate, daysUntilExpiry, getExpiryStatus } from '@/lib/utils'
+import { formatDate, daysUntilExpiry } from '@/lib/utils'
 import ExpiryBadge from '@/components/ExpiryBadge'
 import Link from 'next/link'
 import { Package, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import FrequentProductsSection from '@/components/FrequentProductsSection'
+import type { FrequentItem } from '@/components/QuickAddModal'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -30,6 +32,19 @@ export default async function DashboardPage() {
   const ok      = all.filter(p => daysUntilExpiry(p.expiry_date) > 3)
   const weekAhead = all.filter(p => { const d = daysUntilExpiry(p.expiry_date); return d >= 0 && d <= 7 })
   const recent  = [...all].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0,3)
+
+  // Frequent products: scan_count >= 3, deduplicated by barcode or name
+  const seenKeys = new Set<string>()
+  const frequentProducts: FrequentItem[] = []
+  for (const p of [...all].sort((a, b) => (b.scan_count ?? 0) - (a.scan_count ?? 0))) {
+    if ((p.scan_count ?? 0) < 3) continue
+    const key = p.barcode || p.name
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key)
+      frequentProducts.push({ name: p.name, barcode: p.barcode ?? null, category: p.category, scan_count: p.scan_count ?? 0 })
+      if (frequentProducts.length >= 8) break
+    }
+  }
 
   const stats = [
     { label: 'Total en stock', value: all.length,      icon: Package,       bg: 'bg-bg',             text: 'text-dark' },
@@ -75,6 +90,11 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Produits fréquents */}
+      {frequentProducts.length > 0 && (
+        <FrequentProductsSection items={frequentProducts} restaurantId={restaurant.id} />
+      )}
 
       {/* À surveiller cette semaine */}
       <div className="card overflow-hidden">
