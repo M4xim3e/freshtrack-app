@@ -191,12 +191,23 @@ export default function ScannerPage() {
     }
 
     try {
-      const { Html5Qrcode } = await import('html5-qrcode')
-      const scanner = new Html5Qrcode('qr-reader')
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
+      const scanner = new Html5Qrcode('qr-reader', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
+        ],
+        verbose: false,
+      })
       scannerRef.current = scanner
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 120 } },
+        { fps: 15, qrbox: { width: 260, height: 140 }, aspectRatio: 1.5 },
         async (decodedText: string) => {
           navigator.vibrate?.(60)
           setBarcode(decodedText)
@@ -217,7 +228,12 @@ export default function ScannerPage() {
       const data = await res.json()
       if (data.status === 1) {
         const product   = data.product
-        const name      = product?.product_name_fr || product?.product_name || ''
+        // Build a proper display name: "Brand – Product name"
+        const brand     = product?.brands?.split(',')[0]?.trim() || ''
+        const rawName   = product?.product_name_fr || product?.product_name || ''
+        const name      = brand && rawName && !rawName.toLowerCase().startsWith(brand.toLowerCase())
+          ? `${brand} – ${rawName}`
+          : rawName || brand
         const pnns      = product?.pnns_groups_1 || product?.pnns_groups_2 || ''
         const mappedCat = mapCategory(pnns)
         if (name) {
